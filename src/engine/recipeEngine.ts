@@ -10,8 +10,8 @@ export function generateRecipe(strain: StrainProfile, mode: SessionGoal): Sessio
     stepName: 'Flavor Bloom',
     targetTemp: 170,
     durationSeconds: strain.characteristics.includes('dry') ? 180 : 240,
-    uiInstruction: 'Start checking for flavors. Draw slowly and deeply.',
-    audioPrompt: 'Start session at 170 degrees.',
+    uiInstruction: 'התחל לבדוק טעמים. שאף לאט ועמוק.',
+    audioPrompt: 'קדימה, התחל ב-170 מעלות. שאף לאט ועמוק.',
     requiresUserConfirmation: false,
     triggerAction: 'STEP_UP',
   });
@@ -22,8 +22,8 @@ export function generateRecipe(strain: StrainProfile, mode: SessionGoal): Sessio
     stepName: 'Cannabinoid Extraction',
     targetTemp: 185,
     durationSeconds: 240,
-    uiInstruction: 'Clouds should form now. Vaporize smoothly.',
-    audioPrompt: 'Step up to 185 degrees.',
+    uiInstruction: 'האדים אמורים להיווצר עכשיו. שאף בצורה חלקה.',
+    audioPrompt: 'הגיע הזמן — העלה ל-185 מעלות.',
     requiresUserConfirmation: false,
     triggerAction: 'STEP_UP',
   });
@@ -38,9 +38,8 @@ export function generateRecipe(strain: StrainProfile, mode: SessionGoal): Sessio
       stepName: 'Stir Break',
       targetTemp: 185,
       durationSeconds: 0, // Clock paused until confirmation
-      uiInstruction:
-        'Open the cooling unit. Stir the chamber gently to break up oily clusters.',
-      audioPrompt: 'Time to stir your chamber.',
+      uiInstruction: 'פתח את יחידת הקירור. ערבב את החדר בעדינות לפירוק צבירים שמניים.',
+      audioPrompt: 'הגיע הזמן לערבב. פתח, ערבב בעדינות, ולחץ המשך בסיום.',
       requiresUserConfirmation: true,
       triggerAction: 'STIR',
     });
@@ -53,9 +52,8 @@ export function generateRecipe(strain: StrainProfile, mode: SessionGoal): Sessio
       stepName: 'Complete Extraction',
       targetTemp: Math.min(strain.default_max_temp, 210),
       durationSeconds: 120,
-      uiInstruction:
-        'Extracting remaining heavy cannabinoids (CBN). Expect harsh, sedative vapor.',
-      audioPrompt: `Final step, raise to ${Math.min(strain.default_max_temp, 210)} degrees.`,
+      uiInstruction: 'חילוץ קנבינואידים כבדים (CBN). צפה לאדים חזקים ומרדימים.',
+      audioPrompt: `שלב אחרון — העלה ל-${Math.min(strain.default_max_temp, 210)} מעלות.`,
       requiresUserConfirmation: false,
       triggerAction: 'FINISH',
     });
@@ -66,9 +64,8 @@ export function generateRecipe(strain: StrainProfile, mode: SessionGoal): Sessio
       stepName: 'Clean Daytime Finish',
       targetTemp: 195,
       durationSeconds: 120,
-      uiInstruction:
-        'Finishing daytime session. Stop when vapor thins out to prevent lethargy.',
-      audioPrompt: 'Final step, cap at 195 degrees.',
+      uiInstruction: 'סיום סשן יומי. עצור כשהאד מדלדל כדי למנוע עייפות.',
+      audioPrompt: 'שלב אחרון — העלה ל-195 מעלות.',
       requiresUserConfirmation: false,
       triggerAction: 'FINISH',
     });

@@ -46,8 +46,10 @@ export interface SavedRecipe {
 export type RootStackParamList = {
   SessionSetup: undefined;
   RoutineEditor: {
-    strainId: string;
+    strainId?: string;
+    strainName?: string;          // display name for custom/AI-generated strains
     goal: SessionGoal;
+    preGeneratedSteps?: string;   // JSON SessionStep[] from AI
   };
   ActiveSession: {
     steps: string; // JSON-serialized SessionStep[]

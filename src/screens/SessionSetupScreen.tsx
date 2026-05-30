@@ -9,6 +9,7 @@ import {
   SafeAreaView,
   StatusBar,
   Alert,
+  ActivityIndicator,
 } from 'react-native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { useFocusEffect } from '@react-navigation/native';
@@ -16,6 +17,7 @@ import { RootStackParamList, SessionGoal, StrainProfile, SavedRecipe } from '../
 import { STRAINS } from '../data/strains';
 import { Colors, Typography, Spacing, Radius, ButtonSize } from '../theme';
 import { loadRecipes, deleteRecipe } from '../services/storage';
+import { generateAIPlan, hasApiKey } from '../services/aiPlanGenerator';
 
 type Props = {
   navigation: NativeStackNavigationProp<RootStackParamList, 'SessionSetup'>;
@@ -25,12 +27,12 @@ const GOAL_OPTIONS: { key: SessionGoal; label: string; description: string }[] =
   {
     key: 'WORK_MODE',
     label: 'WORK MODE',
-    description: 'Caps at 195°C — clear-headed, functional high',
+    description: 'עד 195°C — השפעה ממוקדת ותפקודית',
   },
   {
     key: 'NIGHT_MODE',
     label: 'NIGHT MODE',
-    description: `Full extraction up to 210°C — deep sedative effect`,
+    description: 'עד 210°C — חילוץ מלא, השפעה עמוקה ומרגיעה',
   },
 ];
 
@@ -41,8 +43,8 @@ export default function SessionSetupScreen({ navigation }: Props) {
   const [dropdownOpen, setDropdownOpen] = useState(false);
   const [savedRecipes, setSavedRecipes] = useState<SavedRecipe[]>([]);
   const [savedExpanded, setSavedExpanded] = useState(false);
+  const [isGenerating, setIsGenerating] = useState(false);
 
-  // Reload saved recipes every time this screen comes into focus (e.g. after saving in RoutineEditor)
   useFocusEffect(
     useCallback(() => {
       loadRecipes().then(setSavedRecipes);
@@ -66,12 +68,49 @@ export default function SessionSetupScreen({ navigation }: Props) {
     setDropdownOpen(false);
   };
 
-  const handleGenerate = () => {
-    if (!selectedStrain) return;
-    navigation.navigate('RoutineEditor', {
-      strainId: selectedStrain.id,
-      goal,
-    });
+  const handleGenerate = async () => {
+    const trimmed = query.trim();
+    if (!trimmed || isGenerating) return;
+
+    if (selectedStrain) {
+      // Known strain — instant recipe engine, no AI needed
+      navigation.navigate('RoutineEditor', {
+        strainId: selectedStrain.id,
+        strainName: selectedStrain.grower
+          ? `${selectedStrain.name} · ${selectedStrain.grower}`
+          : selectedStrain.name,
+        goal,
+      });
+      return;
+    }
+
+    // Custom strain name — use AI
+    if (!hasApiKey()) {
+      Alert.alert(
+        'מפתח API חסר',
+        'הוסף EXPO_PUBLIC_ANTHROPIC_API_KEY לקובץ .env כדי לייצר תוכניות לזנים מותאמים.',
+        [{ text: 'אישור' }]
+      );
+      return;
+    }
+
+    setIsGenerating(true);
+    try {
+      const steps = await generateAIPlan(trimmed, goal);
+      navigation.navigate('RoutineEditor', {
+        strainName: trimmed,
+        goal,
+        preGeneratedSteps: JSON.stringify(steps),
+      });
+    } catch (err) {
+      Alert.alert(
+        'שגיאה ביצירת תוכנית',
+        err instanceof Error ? err.message : 'לא ניתן לייצר תוכנית. בדוק חיבור אינטרנט.',
+        [{ text: 'אישור' }]
+      );
+    } finally {
+      setIsGenerating(false);
+    }
   };
 
   const typeColor = (type: StrainProfile['type']) => {
@@ -79,6 +118,14 @@ export default function SessionSetupScreen({ navigation }: Props) {
     if (type === 'indica') return Colors.blue;
     return Colors.success;
   };
+
+  const isReady = query.trim().length > 0;
+  const isCustomStrain = isReady && !selectedStrain;
+  const buttonLabel = isGenerating
+    ? 'מייצר תוכנית...'
+    : isCustomStrain
+    ? 'ייצר עם AI'
+    : 'ייצר תוכנית';
 
   return (
     <SafeAreaView style={styles.container}>
@@ -90,24 +137,27 @@ export default function SessionSetupScreen({ navigation }: Props) {
       </View>
 
       <View style={styles.content}>
-        {/* Strain Search */}
-        <Text style={styles.label}>STRAIN</Text>
+        {/* Strain input */}
+        <Text style={styles.label}>זן</Text>
         <View style={styles.inputWrapper}>
           <TextInput
             style={styles.input}
             value={query}
             onChangeText={(t) => {
               setQuery(t);
-              setDropdownOpen(true);
-              if (!t) setSelectedStrain(null);
+              setSelectedStrain(null); // clear any previous selection
+              setDropdownOpen(!!t.trim());
             }}
-            onFocus={() => setDropdownOpen(true)}
-            placeholder="Search strain..."
+            onFocus={() => {
+              if (query.trim()) setDropdownOpen(true);
+            }}
+            placeholder="הכנס שם זן..."
             placeholderTextColor={Colors.textMuted}
             autoCorrect={false}
             autoCapitalize="words"
+            editable={!isGenerating}
           />
-          {query.length > 0 && (
+          {query.length > 0 && !isGenerating && (
             <TouchableOpacity
               onPress={() => {
                 setQuery('');
@@ -122,6 +172,7 @@ export default function SessionSetupScreen({ navigation }: Props) {
           )}
         </View>
 
+        {/* Suggestions from known strains list */}
         {dropdownOpen && filteredStrains.length > 0 && (
           <View style={styles.dropdown}>
             <FlatList
@@ -164,8 +215,17 @@ export default function SessionSetupScreen({ navigation }: Props) {
           </View>
         )}
 
+        {/* AI hint when typing a custom strain */}
+        {isCustomStrain && !dropdownOpen && (
+          <View style={styles.aiHint}>
+            <Text style={styles.aiHintText}>
+              ✦ לא נמצא ברשימה — Claude יייצר תוכנית אישית לזן זה
+            </Text>
+          </View>
+        )}
+
         {/* Goal Selector */}
-        <Text style={[styles.label, { marginTop: Spacing.xl }]}>SESSION GOAL</Text>
+        <Text style={[styles.label, { marginTop: Spacing.xl }]}>מטרת הסשן</Text>
         <View style={styles.goalRow}>
           {GOAL_OPTIONS.map((opt) => (
             <TouchableOpacity
@@ -180,6 +240,7 @@ export default function SessionSetupScreen({ navigation }: Props) {
               ]}
               onPress={() => setGoal(opt.key)}
               activeOpacity={0.75}
+              disabled={isGenerating}
             >
               <Text
                 style={[
@@ -204,7 +265,7 @@ export default function SessionSetupScreen({ navigation }: Props) {
               onPress={() => setSavedExpanded((v) => !v)}
               activeOpacity={0.75}
             >
-              <Text style={styles.label}>SAVED ROUTINES ({savedRecipes.length})</Text>
+              <Text style={styles.label}>תוכניות שמורות ({savedRecipes.length})</Text>
               <Text style={styles.savedChevron}>{savedExpanded ? '▲' : '▼'}</Text>
             </TouchableOpacity>
 
@@ -229,17 +290,18 @@ export default function SessionSetupScreen({ navigation }: Props) {
                         { color: recipe.goal === 'WORK_MODE' ? Colors.orange : Colors.blue },
                       ]}
                     >
-                      {recipe.goal === 'WORK_MODE' ? 'WORK' : 'NIGHT'} · {recipe.steps.length} STEPS
+                      {recipe.goal === 'WORK_MODE' ? 'WORK' : 'NIGHT'} · {recipe.steps.length}{' '}
+                      שלבים
                     </Text>
                   </TouchableOpacity>
                   <TouchableOpacity
                     style={styles.savedDeleteBtn}
                     hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
                     onPress={() =>
-                      Alert.alert('Delete Routine', `Delete "${recipe.name}"?`, [
-                        { text: 'Cancel', style: 'cancel' },
+                      Alert.alert('מחיקת תוכנית', `מחוק את "${recipe.name}"?`, [
+                        { text: 'ביטול', style: 'cancel' },
                         {
-                          text: 'Delete',
+                          text: 'מחק',
                           style: 'destructive',
                           onPress: async () => {
                             await deleteRecipe(recipe.id);
@@ -260,12 +322,23 @@ export default function SessionSetupScreen({ navigation }: Props) {
       {/* CTA */}
       <View style={styles.footer}>
         <TouchableOpacity
-          style={[styles.ctaButton, !selectedStrain && styles.ctaButtonDisabled]}
+          style={[
+            styles.ctaButton,
+            (!isReady || isGenerating) && styles.ctaButtonDisabled,
+            isCustomStrain && isReady && !isGenerating && styles.ctaButtonAI,
+          ]}
           onPress={handleGenerate}
-          disabled={!selectedStrain}
+          disabled={!isReady || isGenerating}
           activeOpacity={0.8}
         >
-          <Text style={styles.ctaText}>GENERATE ROUTINE</Text>
+          {isGenerating ? (
+            <View style={styles.ctaLoadingRow}>
+              <ActivityIndicator color={Colors.textPrimary} size="small" />
+              <Text style={[styles.ctaText, { marginLeft: Spacing.sm }]}>{buttonLabel}</Text>
+            </View>
+          ) : (
+            <Text style={styles.ctaText}>{buttonLabel}</Text>
+          )}
         </TouchableOpacity>
       </View>
     </SafeAreaView>
@@ -311,6 +384,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: Spacing.md,
     fontSize: 16,
     color: Colors.textPrimary,
+    textAlign: 'right',
   },
   clearBtn: {
     padding: Spacing.md,
@@ -387,6 +461,20 @@ const styles = StyleSheet.create({
     color: Colors.orange,
     marginLeft: Spacing.sm,
   },
+  aiHint: {
+    marginTop: Spacing.sm,
+    paddingHorizontal: Spacing.sm,
+    paddingVertical: Spacing.xs,
+    backgroundColor: `${Colors.orange}12`,
+    borderRadius: Radius.sm,
+    borderLeftWidth: 2,
+    borderLeftColor: Colors.orange,
+  },
+  aiHintText: {
+    fontSize: 12,
+    color: Colors.orange,
+    fontWeight: '600',
+  },
   goalRow: {
     gap: Spacing.md,
   },
@@ -410,6 +498,7 @@ const styles = StyleSheet.create({
     fontSize: 13,
     color: Colors.textMuted,
     lineHeight: 18,
+    textAlign: 'right',
   },
   footer: {
     paddingHorizontal: Spacing.lg,
@@ -425,6 +514,13 @@ const styles = StyleSheet.create({
   },
   ctaButtonDisabled: {
     backgroundColor: Colors.border,
+  },
+  ctaButtonAI: {
+    backgroundColor: Colors.blue,
+  },
+  ctaLoadingRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
   },
   ctaText: {
     fontSize: 16,
