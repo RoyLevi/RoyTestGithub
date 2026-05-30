@@ -1,0 +1,41 @@
+{
+  "expo": {
+    "name": "VaporTime",
+    "slug": "vaportime",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "dark",
+    "splash": {
+      "backgroundColor": "#0D0D0D"
+    },
+    "ios": {
+      "supportsTablet": false,
+      "infoPlist": {
+        "UIBackgroundModes": ["fetch", "remote-notification", "audio"],
+        "NSMicrophoneUsageDescription": "VaporTime uses audio for session alerts.",
+        "NSSpeechRecognitionUsageDescription": "VaporTime uses speech for audio cues."
+      }
+    },
+    "android": {
+      "adaptiveIcon": {
+        "backgroundColor": "#0D0D0D"
+      },
+      "permissions": [
+        "RECEIVE_BOOT_COMPLETED",
+        "VIBRATE",
+        "FOREGROUND_SERVICE"
+      ]
+    },
+    "plugins": [
+      [
+        "expo-notifications",
+        {
+          "color": "#FF6B35",
+          "sounds": []
+        }
+      ],
+      "expo-background-fetch"
+    ],
+    "backgroundColor": "#0D0D0D"
+  }
+}
