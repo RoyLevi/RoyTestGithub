@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect, useCallback } from 'react';
 import {
   View,
   Text,
@@ -8,11 +8,14 @@ import {
   StyleSheet,
   SafeAreaView,
   StatusBar,
+  Alert,
 } from 'react-native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
-import { RootStackParamList, SessionGoal, StrainProfile } from '../types';
+import { useFocusEffect } from '@react-navigation/native';
+import { RootStackParamList, SessionGoal, StrainProfile, SavedRecipe } from '../types';
 import { STRAINS } from '../data/strains';
 import { Colors, Typography, Spacing, Radius, ButtonSize } from '../theme';
+import { loadRecipes, deleteRecipe } from '../services/storage';
 
 type Props = {
   navigation: NativeStackNavigationProp<RootStackParamList, 'SessionSetup'>;
@@ -36,6 +39,15 @@ export default function SessionSetupScreen({ navigation }: Props) {
   const [selectedStrain, setSelectedStrain] = useState<StrainProfile | null>(null);
   const [goal, setGoal] = useState<SessionGoal>('WORK_MODE');
   const [dropdownOpen, setDropdownOpen] = useState(false);
+  const [savedRecipes, setSavedRecipes] = useState<SavedRecipe[]>([]);
+  const [savedExpanded, setSavedExpanded] = useState(false);
+
+  // Reload saved recipes every time this screen comes into focus (e.g. after saving in RoutineEditor)
+  useFocusEffect(
+    useCallback(() => {
+      loadRecipes().then(setSavedRecipes);
+    }, [])
+  );
 
   const filteredStrains = useMemo(() => {
     if (!query.trim()) return STRAINS;
@@ -183,6 +195,66 @@ export default function SessionSetupScreen({ navigation }: Props) {
             </TouchableOpacity>
           ))}
         </View>
+
+        {/* Saved Routines */}
+        {savedRecipes.length > 0 && (
+          <View style={{ marginTop: Spacing.xl }}>
+            <TouchableOpacity
+              style={styles.savedHeader}
+              onPress={() => setSavedExpanded((v) => !v)}
+              activeOpacity={0.75}
+            >
+              <Text style={styles.label}>SAVED ROUTINES ({savedRecipes.length})</Text>
+              <Text style={styles.savedChevron}>{savedExpanded ? '▲' : '▼'}</Text>
+            </TouchableOpacity>
+
+            {savedExpanded &&
+              savedRecipes.map((recipe) => (
+                <View key={recipe.id} style={styles.savedRow}>
+                  <TouchableOpacity
+                    style={styles.savedRowMain}
+                    onPress={() =>
+                      navigation.navigate('ActiveSession', {
+                        steps: JSON.stringify(recipe.steps),
+                        strainName: recipe.name,
+                        goal: recipe.goal,
+                      })
+                    }
+                    activeOpacity={0.8}
+                  >
+                    <Text style={styles.savedRowName}>{recipe.name}</Text>
+                    <Text
+                      style={[
+                        styles.savedRowGoal,
+                        { color: recipe.goal === 'WORK_MODE' ? Colors.orange : Colors.blue },
+                      ]}
+                    >
+                      {recipe.goal === 'WORK_MODE' ? 'WORK' : 'NIGHT'} · {recipe.steps.length} STEPS
+                    </Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={styles.savedDeleteBtn}
+                    hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                    onPress={() =>
+                      Alert.alert('Delete Routine', `Delete "${recipe.name}"?`, [
+                        { text: 'Cancel', style: 'cancel' },
+                        {
+                          text: 'Delete',
+                          style: 'destructive',
+                          onPress: async () => {
+                            await deleteRecipe(recipe.id);
+                            setSavedRecipes((prev) => prev.filter((r) => r.id !== recipe.id));
+                          },
+                        },
+                      ])
+                    }
+                  >
+                    <Text style={styles.savedDeleteText}>✕</Text>
+                  </TouchableOpacity>
+                </View>
+              ))}
+          </View>
+        )}
       </View>
 
       {/* CTA */}
@@ -359,5 +431,51 @@ const styles = StyleSheet.create({
     fontWeight: '800',
     letterSpacing: 2,
     color: Colors.textPrimary,
+  },
+  savedHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: Spacing.sm,
+  },
+  savedChevron: {
+    fontSize: 10,
+    color: Colors.textMuted,
+  },
+  savedRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: Colors.surface,
+    borderRadius: Radius.md,
+    borderWidth: 1,
+    borderColor: Colors.border,
+    marginBottom: Spacing.sm,
+    overflow: 'hidden',
+  },
+  savedRowMain: {
+    flex: 1,
+    paddingHorizontal: Spacing.md,
+    paddingVertical: 12,
+  },
+  savedRowName: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: Colors.textPrimary,
+    marginBottom: 3,
+  },
+  savedRowGoal: {
+    fontSize: 11,
+    fontWeight: '700',
+    letterSpacing: 1,
+  },
+  savedDeleteBtn: {
+    paddingHorizontal: Spacing.md,
+    paddingVertical: 16,
+    borderLeftWidth: 1,
+    borderLeftColor: Colors.border,
+  },
+  savedDeleteText: {
+    fontSize: 14,
+    color: Colors.textMuted,
   },
 });

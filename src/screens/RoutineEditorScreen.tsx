@@ -8,13 +8,16 @@ import {
   SafeAreaView,
   StatusBar,
   Alert,
+  TextInput,
+  Platform,
 } from 'react-native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { RouteProp } from '@react-navigation/native';
-import { RootStackParamList, SessionStep } from '../types';
+import { RootStackParamList, SessionStep, SavedRecipe } from '../types';
 import { getStrainById } from '../data/strains';
 import { generateRecipe } from '../engine/recipeEngine';
 import { Colors, Typography, Spacing, Radius, ButtonSize } from '../theme';
+import { saveRecipe } from '../services/storage';
 
 type Props = {
   navigation: NativeStackNavigationProp<RootStackParamList, 'RoutineEditor'>;
@@ -87,6 +90,48 @@ export default function RoutineEditorScreen({ navigation, route }: Props) {
     if (!strain) return;
     setSteps(generateRecipe(strain, goal));
   };
+
+  const handleSave = () => {
+    if (!strain) return;
+    const doSave = async (name: string) => {
+      const recipe: SavedRecipe = {
+        id: `${strain.id}_${goal}_${Date.now()}`,
+        name: name.trim(),
+        strainId: strain.id,
+        goal,
+        steps,
+        savedAt: Date.now(),
+      };
+      await saveRecipe(recipe);
+      Alert.alert('Saved', `"${recipe.name}" saved to your routines.`);
+    };
+
+    if (Platform.OS === 'ios') {
+      Alert.prompt(
+        'Save Routine',
+        'Give this routine a name:',
+        [
+          { text: 'Cancel', style: 'cancel' },
+          {
+            text: 'Save',
+            onPress: (name) => {
+              if (name?.trim()) doSave(name);
+            },
+          },
+        ],
+        'plain-text',
+        strain.grower ? `${strain.name} · ${strain.grower}` : strain.name
+      );
+    } else {
+      // Android fallback — inline prompt via state
+      setSaveNameVisible(true);
+    }
+  };
+
+  const [saveNameVisible, setSaveNameVisible] = useState(false);
+  const [saveName, setSaveName] = useState(
+    strain ? (strain.grower ? `${strain.name} · ${strain.grower}` : strain.name) : ''
+  );
 
   const renderStep = ({ item, index }: { item: SessionStep; index: number }) => {
     const accent = stepAccentColor(item);
@@ -186,10 +231,55 @@ export default function RoutineEditorScreen({ navigation, route }: Props) {
             </Text>
           )}
         </View>
-        <TouchableOpacity onPress={handleReset} style={styles.resetBtn}>
-          <Text style={styles.resetBtnText}>RESET</Text>
-        </TouchableOpacity>
+        <View style={styles.headerRight}>
+          <TouchableOpacity onPress={handleSave} style={styles.saveBtn}>
+            <Text style={styles.saveBtnText}>SAVE</Text>
+          </TouchableOpacity>
+          <TouchableOpacity onPress={handleReset} style={styles.resetBtn}>
+            <Text style={styles.resetBtnText}>RESET</Text>
+          </TouchableOpacity>
+        </View>
       </View>
+
+      {/* Android: inline save name input */}
+      {saveNameVisible && (
+        <View style={styles.saveNameRow}>
+          <TextInput
+            style={styles.saveNameInput}
+            value={saveName}
+            onChangeText={setSaveName}
+            placeholder="Routine name..."
+            placeholderTextColor={Colors.textMuted}
+            autoFocus
+          />
+          <TouchableOpacity
+            style={styles.saveNameConfirm}
+            onPress={async () => {
+              if (saveName.trim()) {
+                const recipe: SavedRecipe = {
+                  id: `${strain?.id}_${goal}_${Date.now()}`,
+                  name: saveName.trim(),
+                  strainId: strain?.id ?? '',
+                  goal,
+                  steps,
+                  savedAt: Date.now(),
+                };
+                await saveRecipe(recipe);
+                setSaveNameVisible(false);
+                Alert.alert('Saved', `"${recipe.name}" saved to your routines.`);
+              }
+            }}
+          >
+            <Text style={styles.saveNameConfirmText}>SAVE</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            onPress={() => setSaveNameVisible(false)}
+            style={styles.saveNameCancel}
+          >
+            <Text style={styles.saveNameCancelText}>✕</Text>
+          </TouchableOpacity>
+        </View>
+      )}
 
       {/* Summary bar */}
       <View style={styles.summaryBar}>
@@ -401,5 +491,61 @@ const styles = StyleSheet.create({
     fontWeight: '800',
     letterSpacing: 2.5,
     color: Colors.textPrimary,
+  },
+  headerRight: {
+    flexDirection: 'row',
+    gap: Spacing.xs,
+    minWidth: 100,
+    justifyContent: 'flex-end',
+  },
+  saveBtn: {
+    paddingVertical: Spacing.sm,
+    paddingHorizontal: Spacing.sm,
+  },
+  saveBtnText: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: Colors.orange,
+    letterSpacing: 0.5,
+  },
+  saveNameRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: Spacing.md,
+    paddingVertical: Spacing.sm,
+    backgroundColor: Colors.surfaceElevated,
+    borderBottomWidth: 1,
+    borderBottomColor: Colors.border,
+    gap: Spacing.sm,
+  },
+  saveNameInput: {
+    flex: 1,
+    height: 40,
+    backgroundColor: Colors.surface,
+    borderRadius: Radius.sm,
+    paddingHorizontal: Spacing.md,
+    fontSize: 15,
+    color: Colors.textPrimary,
+    borderWidth: 1,
+    borderColor: Colors.border,
+  },
+  saveNameConfirm: {
+    paddingHorizontal: Spacing.md,
+    paddingVertical: Spacing.sm,
+    backgroundColor: Colors.orange,
+    borderRadius: Radius.sm,
+  },
+  saveNameConfirmText: {
+    fontSize: 13,
+    fontWeight: '800',
+    color: Colors.textPrimary,
+    letterSpacing: 1,
+  },
+  saveNameCancel: {
+    padding: Spacing.sm,
+  },
+  saveNameCancelText: {
+    fontSize: 16,
+    color: Colors.textMuted,
   },
 });
