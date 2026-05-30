@@ -17,6 +17,7 @@
       }
     },
     "android": {
+      "package": "com.roylevi.vaportime",
       "adaptiveIcon": {
         "backgroundColor": "#0D0D0D"
       },

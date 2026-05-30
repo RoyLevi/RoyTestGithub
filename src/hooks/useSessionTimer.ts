@@ -67,9 +67,10 @@ export function useSessionTimer(
     }
   }, []);
 
-  // Speak a TTS prompt asynchronously
+  // Speak a TTS prompt — auto-detect Hebrew vs English
   const speak = useCallback((text: string) => {
-    Speech.speak(text, { language: 'en-US', rate: 0.92, pitch: 1.0 });
+    const language = /[֐-׿]/.test(text) ? 'he-IL' : 'en-US';
+    Speech.speak(text, { language, rate: 0.9, pitch: 1.0 });
   }, []);
 
   // Advance to the next step (or finish)
@@ -82,7 +83,7 @@ export function useSessionTimer(
         clearTick();
         setIsComplete(true);
         setDisplayTime(0);
-        speak('Session complete. Great job!');
+        speak('הסשן הסתיים. כל הכבוד!');
         await cancelAllSessionNotifications();
         onComplete();
         return;
@@ -113,11 +114,9 @@ export function useSessionTimer(
       setIsPaused(false);
       pausedAt.current = null;
 
-      // Schedule step-end notification
+      // Schedule step-end notification using the next step's audio prompt
       const nextNextStep = steps[nextIndex + 1];
-      const notifText = nextNextStep
-        ? `Set device to ${nextNextStep.targetTemp}°C`
-        : 'Session finishing up.';
+      const notifText = nextNextStep?.audioPrompt ?? 'הסשן מסתיים.';
       const id = await scheduleStepEndNotification(
         nextStep.stepName,
         notifText,
@@ -204,7 +203,7 @@ export function useSessionTimer(
       const nextStep = steps[1];
       const id = await scheduleStepEndNotification(
         firstStep.stepName,
-        nextStep ? `Set device to ${nextStep.targetTemp}°C` : 'Session finishing up.',
+        nextStep?.audioPrompt ?? 'הסשן מסתיים.',
         nextStep?.targetTemp ?? 0,
         firstStep.durationSeconds
       );
@@ -256,7 +255,7 @@ export function useSessionTimer(
       const nextStep = steps[idx + 1];
       const id = await scheduleStepEndNotification(
         step.stepName,
-        nextStep ? `Set device to ${nextStep.targetTemp}°C` : 'Session finishing up.',
+        nextStep?.audioPrompt ?? 'הסשן מסתיים.',
         nextStep?.targetTemp ?? 0,
         remaining
       );
@@ -290,7 +289,7 @@ export function useSessionTimer(
         const nextStep = steps[idx + 1];
         const id = await scheduleStepEndNotification(
           step.stepName,
-          nextStep ? `Set device to ${nextStep.targetTemp}°C` : 'Session finishing up.',
+          nextStep?.audioPrompt ?? 'הסשן מסתיים.',
           nextStep?.targetTemp ?? 0,
           remaining
         );
@@ -304,7 +303,7 @@ export function useSessionTimer(
     if (!isAwaitingConfirmation) return;
     setIsAwaitingConfirmation(false);
     cancelPendingNotif();
-    speak('Continuing session. Good work.');
+    speak('ממשיכים. כל הכבוד.');
     advanceStep(stepIndexRef.current);
   }, [isAwaitingConfirmation, cancelPendingNotif, speak, advanceStep]);
 

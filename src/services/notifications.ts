@@ -63,8 +63,8 @@ export async function scheduleStepEndNotification(
 export async function scheduleStirNotification(delaySeconds: number): Promise<string> {
   const id = await Notifications.scheduleNotificationAsync({
     content: {
-      title: 'Stir Alert!',
-      body: 'Open the cooling unit, mix gently, and tap Continue when ready.',
+      title: 'הגיע הזמן לערבב!',
+      body: 'פתח את יחידת הקירור, ערבב בעדינות, ולחץ המשך בסיום.',
       sound: 'default',
       data: { type: 'STIR' },
       ...(Platform.OS === 'android' && { channelId: 'vaportime-session' }),

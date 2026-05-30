@@ -41,12 +41,27 @@ function stepAccentColor(step: SessionStep): string {
 }
 
 export default function RoutineEditorScreen({ navigation, route }: Props) {
-  const { strainId, goal } = route.params;
-  const strain = getStrainById(strainId);
+  const { strainId, strainName: routeStrainName, goal, preGeneratedSteps } = route.params;
+
+  const strain = strainId ? getStrainById(strainId) : undefined;
+
+  // Derive the display name for headers and navigation
+  const displayName =
+    routeStrainName ??
+    (strain ? (strain.grower ? `${strain.name} · ${strain.grower}` : strain.name) : '');
+
+  const isAIPlan = !!preGeneratedSteps;
 
   const [steps, setSteps] = useState<SessionStep[]>(() => {
-    if (!strain) return [];
-    return generateRecipe(strain, goal);
+    if (preGeneratedSteps) {
+      try {
+        return JSON.parse(preGeneratedSteps) as SessionStep[];
+      } catch {
+        return [];
+      }
+    }
+    if (strain) return generateRecipe(strain, goal);
+    return [];
   });
 
   const totalSeconds = steps.reduce((s, step) => s + step.durationSeconds, 0);
@@ -57,7 +72,7 @@ export default function RoutineEditorScreen({ navigation, route }: Props) {
     setSteps((prev) =>
       prev.map((step, i) => {
         if (i !== index) return step;
-        if (step.requiresUserConfirmation) return step; // stir steps don't have durations
+        if (step.requiresUserConfirmation) return step;
         const next = Math.max(30, step.durationSeconds + delta);
         return { ...step, durationSeconds: next };
       })
@@ -75,63 +90,73 @@ export default function RoutineEditorScreen({ navigation, route }: Props) {
   }, []);
 
   const handleStart = () => {
-    if (!strain) {
-      Alert.alert('Error', 'Strain not found.');
+    if (steps.length === 0) {
+      Alert.alert('שגיאה', 'לא נמצאו שלבים בתוכנית.');
       return;
     }
     navigation.navigate('ActiveSession', {
       steps: JSON.stringify(steps),
-      strainName: strain.grower ? `${strain.name} · ${strain.grower}` : strain.name,
+      strainName: displayName,
       goal,
     });
   };
 
   const handleReset = () => {
-    if (!strain) return;
-    setSteps(generateRecipe(strain, goal));
+    if (isAIPlan) {
+      Alert.alert(
+        'תוכנית AI',
+        'חזור למסך הבית וייצר מחדש כדי לקבל תוכנית AI חדשה.',
+        [{ text: 'אישור' }]
+      );
+      return;
+    }
+    if (strain) {
+      setSteps(generateRecipe(strain, goal));
+    }
   };
 
   const handleSave = () => {
-    if (!strain) return;
+    const recipeId = strain
+      ? `${strain.id}_${goal}_${Date.now()}`
+      : `${displayName.replace(/\s+/g, '_').toLowerCase()}_${goal}_${Date.now()}`;
+
     const doSave = async (name: string) => {
       const recipe: SavedRecipe = {
-        id: `${strain.id}_${goal}_${Date.now()}`,
+        id: recipeId,
         name: name.trim(),
-        strainId: strain.id,
+        strainId: strain?.id ?? '',
         goal,
         steps,
         savedAt: Date.now(),
       };
       await saveRecipe(recipe);
-      Alert.alert('Saved', `"${recipe.name}" saved to your routines.`);
+      Alert.alert('נשמר', `"${recipe.name}" נשמרה לתוכניות שלך.`);
     };
 
     if (Platform.OS === 'ios') {
       Alert.prompt(
-        'Save Routine',
-        'Give this routine a name:',
+        'שמור תוכנית',
+        'תן לתוכנית שם:',
         [
-          { text: 'Cancel', style: 'cancel' },
+          { text: 'ביטול', style: 'cancel' },
           {
-            text: 'Save',
+            text: 'שמור',
             onPress: (name) => {
               if (name?.trim()) doSave(name);
             },
           },
         ],
         'plain-text',
-        strain.grower ? `${strain.name} · ${strain.grower}` : strain.name
+        displayName
       );
     } else {
-      // Android fallback — inline prompt via state
+      setSaveName(displayName);
       setSaveNameVisible(true);
     }
   };
 
   const [saveNameVisible, setSaveNameVisible] = useState(false);
-  const [saveName, setSaveName] = useState(
-    strain ? (strain.grower ? `${strain.name} · ${strain.grower}` : strain.name) : ''
-  );
+  const [saveName, setSaveName] = useState(displayName);
 
   const renderStep = ({ item, index }: { item: SessionStep; index: number }) => {
     const accent = stepAccentColor(item);
@@ -147,7 +172,7 @@ export default function RoutineEditorScreen({ navigation, route }: Props) {
             <Text style={styles.stepName}>{item.stepName}</Text>
             {isStir && (
               <View style={[styles.stirBadge, { backgroundColor: `${Colors.stir}25` }]}>
-                <Text style={[styles.stirBadgeText, { color: Colors.stir }]}>MANUAL PAUSE</Text>
+                <Text style={[styles.stirBadgeText, { color: Colors.stir }]}>עצירה ידנית</Text>
               </View>
             )}
           </View>
@@ -158,7 +183,7 @@ export default function RoutineEditorScreen({ navigation, route }: Props) {
         <View style={styles.stepControls}>
           {/* Temperature control */}
           <View style={styles.controlBlock}>
-            <Text style={styles.controlLabel}>TEMP</Text>
+            <Text style={styles.controlLabel}>טמפ׳</Text>
             <View style={styles.controlRow}>
               <TouchableOpacity
                 style={styles.adjBtn}
@@ -180,7 +205,7 @@ export default function RoutineEditorScreen({ navigation, route }: Props) {
 
           {/* Duration control */}
           <View style={styles.controlBlock}>
-            <Text style={styles.controlLabel}>DURATION</Text>
+            <Text style={styles.controlLabel}>משך</Text>
             <View style={styles.controlRow}>
               {!isStir ? (
                 <>
@@ -201,7 +226,7 @@ export default function RoutineEditorScreen({ navigation, route }: Props) {
                   </TouchableOpacity>
                 </>
               ) : (
-                <Text style={[styles.controlValue, { color: Colors.stir }]}>MANUAL</Text>
+                <Text style={[styles.controlValue, { color: Colors.stir }]}>ידני</Text>
               )}
             </View>
           </View>
@@ -217,26 +242,28 @@ export default function RoutineEditorScreen({ navigation, route }: Props) {
       {/* Header */}
       <View style={styles.header}>
         <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backBtn}>
-          <Text style={styles.backBtnText}>← BACK</Text>
+          <Text style={styles.backBtnText}>← חזור</Text>
         </TouchableOpacity>
         <View style={styles.headerCenter}>
-          <Text style={styles.headerTitle}>ROUTINE</Text>
-          {strain && (
+          <Text style={styles.headerTitle}>תוכנית</Text>
+          {displayName ? (
             <Text style={styles.headerSub}>
-              {strain.name}
-              {strain.grower ? ` · ${strain.grower}` : ''} ·{' '}
+              {displayName} ·{' '}
               <Text style={{ color: goal === 'WORK_MODE' ? Colors.orange : Colors.blue }}>
                 {goal === 'WORK_MODE' ? 'WORK' : 'NIGHT'}
               </Text>
+              {isAIPlan && (
+                <Text style={{ color: Colors.blue }}> · AI</Text>
+              )}
             </Text>
-          )}
+          ) : null}
         </View>
         <View style={styles.headerRight}>
           <TouchableOpacity onPress={handleSave} style={styles.saveBtn}>
-            <Text style={styles.saveBtnText}>SAVE</Text>
+            <Text style={styles.saveBtnText}>שמור</Text>
           </TouchableOpacity>
           <TouchableOpacity onPress={handleReset} style={styles.resetBtn}>
-            <Text style={styles.resetBtnText}>RESET</Text>
+            <Text style={styles.resetBtnText}>{isAIPlan ? '—' : 'איפוס'}</Text>
           </TouchableOpacity>
         </View>
       </View>
@@ -248,7 +275,7 @@ export default function RoutineEditorScreen({ navigation, route }: Props) {
             style={styles.saveNameInput}
             value={saveName}
             onChangeText={setSaveName}
-            placeholder="Routine name..."
+            placeholder="שם התוכנית..."
             placeholderTextColor={Colors.textMuted}
             autoFocus
           />
@@ -257,7 +284,7 @@ export default function RoutineEditorScreen({ navigation, route }: Props) {
             onPress={async () => {
               if (saveName.trim()) {
                 const recipe: SavedRecipe = {
-                  id: `${strain?.id}_${goal}_${Date.now()}`,
+                  id: `${strain?.id ?? displayName.replace(/\s+/g, '_').toLowerCase()}_${goal}_${Date.now()}`,
                   name: saveName.trim(),
                   strainId: strain?.id ?? '',
                   goal,
@@ -266,11 +293,11 @@ export default function RoutineEditorScreen({ navigation, route }: Props) {
                 };
                 await saveRecipe(recipe);
                 setSaveNameVisible(false);
-                Alert.alert('Saved', `"${recipe.name}" saved to your routines.`);
+                Alert.alert('נשמר', `"${recipe.name}" נשמרה לתוכניות שלך.`);
               }
             }}
           >
-            <Text style={styles.saveNameConfirmText}>SAVE</Text>
+            <Text style={styles.saveNameConfirmText}>שמור</Text>
           </TouchableOpacity>
           <TouchableOpacity
             onPress={() => setSaveNameVisible(false)}
@@ -284,13 +311,13 @@ export default function RoutineEditorScreen({ navigation, route }: Props) {
       {/* Summary bar */}
       <View style={styles.summaryBar}>
         <Text style={styles.summaryText}>
-          {steps.length} STEPS ·{' '}
+          {steps.length} שלבים ·{' '}
           <Text style={{ color: Colors.orange }}>
-            {totalMin > 0 ? `${totalMin}m ` : ''}
-            {totalSec > 0 ? `${totalSec}s` : ''}
-            {totalSeconds === 0 ? 'MANUAL' : ''}
+            {totalMin > 0 ? `${totalMin}ד ` : ''}
+            {totalSec > 0 ? `${totalSec}ש` : ''}
+            {totalSeconds === 0 ? 'ידני' : ''}
           </Text>{' '}
-          TOTAL
+          סה"כ
         </Text>
       </View>
 
@@ -304,7 +331,7 @@ export default function RoutineEditorScreen({ navigation, route }: Props) {
 
       <View style={styles.footer}>
         <TouchableOpacity style={styles.startButton} onPress={handleStart} activeOpacity={0.85}>
-          <Text style={styles.startButtonText}>START SESSION</Text>
+          <Text style={styles.startButtonText}>התחל סשן</Text>
         </TouchableOpacity>
       </View>
     </SafeAreaView>
@@ -354,7 +381,7 @@ const styles = StyleSheet.create({
   resetBtn: {
     paddingVertical: Spacing.sm,
     paddingLeft: Spacing.md,
-    minWidth: 70,
+    minWidth: 50,
     alignItems: 'flex-end',
   },
   resetBtnText: {
@@ -429,6 +456,7 @@ const styles = StyleSheet.create({
   stepInstruction: {
     ...Typography.instruction,
     marginBottom: Spacing.md,
+    textAlign: 'right',
   },
   stepControls: {
     flexDirection: 'row',
@@ -528,6 +556,7 @@ const styles = StyleSheet.create({
     color: Colors.textPrimary,
     borderWidth: 1,
     borderColor: Colors.border,
+    textAlign: 'right',
   },
   saveNameConfirm: {
     paddingHorizontal: Spacing.md,
